@@ -39,7 +39,7 @@ export class StructuredAgentSessionSendRecovery {
 
   constructor(
     private readonly deps: {
-      getRecord: (sessionId: string) => AgentSessionRecord | undefined
+      getRecord: (sessionId: string) => AgentSessionRecord | null
       /** Gives the session a provider child; throws the refusal code when it cannot. */
       resume: (sessionId: string) => Promise<void>
       onError?: (input: { sessionId: string; error: unknown }) => void
