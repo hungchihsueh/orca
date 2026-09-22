@@ -21,7 +21,8 @@ import {
 } from './structured-agent-session-host-test-data'
 
 const CALLER = { callerKey: 'client-1' }
-const GRACE_MS = 5
+// Long enough that no release fires mid-test; whether one is pending is asserted directly.
+const GRACE_MS = 60_000
 
 let root: string
 let store: AgentSessionRecordStore
@@ -119,6 +120,22 @@ describe('a send with no live owner', () => {
     expect(acquire).toHaveBeenCalledOnce()
     expect(dispatch).toHaveBeenCalledOnce()
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('live')
+  })
+
+  it('releases the restarted child on the usual clock only when no surface holds it', async () => {
+    await loseOwner()
+    await expect(host.send(CALLER, sendParams('nobody is watching'))).resolves.toMatchObject({
+      ok: true
+    })
+    expect(host['holds'].isReleasePending(SESSION)).toBe(true)
+
+    await host.close(SESSION)
+    // A reading surface that does not itself restart the agent.
+    await host.hold(SESSION, 'desktop-chat:1', { resume: false })
+    await expect(host.send(CALLER, sendParams('the chat is open'))).resolves.toMatchObject({
+      ok: true
+    })
+    expect(host['holds'].isReleasePending(SESSION)).toBe(false)
   })
 
   it('restarts an owner that exited while the session stayed readable', async () => {
