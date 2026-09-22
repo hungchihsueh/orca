@@ -553,7 +553,7 @@ describe('useStructuredAgentSessionOutbox', () => {
     expect(result.current.outbox).toHaveLength(1)
     expect(result.current.blockedClientMessageId).toBe(result.current.outbox[0]?.clientMessageId)
     // Settled, not pending: the refused id never ran, so a Retry is a new operation.
-    const sentId = mocks.call.mock.calls[0]![2].envelope.clientOperationId as string
+    const sentId: unknown = mocks.call.mock.calls[0]![2].envelope.clientOperationId
     expect(result.current.outbox[0]?.clientMessageId).not.toBe(sentId)
   })
 
