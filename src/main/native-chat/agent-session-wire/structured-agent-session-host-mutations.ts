@@ -41,6 +41,8 @@ export type StructuredAgentSessionMutationContext = {
   hasPendingStreamedEvents?: (sessionId: string) => boolean
   requireSession: (sessionId: string) => StructuredAgentSessionHostSession
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
+  /** Gives a childless session a provider child; throws the refusal code when it cannot. */
+  resumeUnheld: (sessionId: string) => Promise<void>
   now: () => number
 }
 

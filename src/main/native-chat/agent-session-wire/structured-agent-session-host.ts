@@ -277,6 +277,7 @@ export class StructuredAgentSessionHost {
         this.runtimeState.hasPendingStreamedEvents(sessionId),
       requireSession: (sessionId) => this.requireSession(sessionId),
       serialize: (sessionId, task) => this.serialize(sessionId, task),
+      resumeUnheld: (sessionId) => this.holds.resumeUnheld(sessionId),
       now: () => this.now()
     }
   }

@@ -529,6 +529,31 @@ describe('useStructuredAgentSessionOutbox', () => {
     ).toBe(firstId)
   })
 
+  it('stops on a host that could not restart the agent and shows its message', async () => {
+    const message =
+      "This chat's agent stopped and could not be restarted. Start a new chat to continue."
+    mocks.call.mockResolvedValue({
+      ok: false,
+      refusal: { code: 'agent_session_owner_unrecoverable', message }
+    })
+    const { result } = renderHook(() =>
+      useStructuredAgentSessionOutbox({
+        sessionId: 'session-1',
+        target: LOCAL_TARGET,
+        fence: 1,
+        submissions: []
+      })
+    )
+
+    act(() => expect(result.current.send('hello')).toBe(true))
+    await waitFor(() => expect(result.current.error).toBe(message))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+
+    expect(mocks.call).toHaveBeenCalledOnce()
+    expect(result.current.outbox).toHaveLength(1)
+    expect(result.current.blockedClientMessageId).toBe(result.current.outbox[0]?.clientMessageId)
+  })
+
   it('persists and dispatches an attachment-only structured send', async () => {
     mocks.call.mockResolvedValue(acceptedResult(1))
     const { result } = renderHook(() =>

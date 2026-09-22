@@ -247,7 +247,9 @@ const UNREACHABLE = new Set<Pair>([
   'agentSession.setOption:agent_session_journal_unreadable',
   'agentSession.send:agent_session_journal_unreadable',
   // Send reconstructs doubt from its global tombstone instead of refusing it.
-  'agentSession.send:agent_session_operation_unknown'
+  'agentSession.send:agent_session_operation_unknown',
+  // Only a send restarts a lost owner.
+  'agentSession.setOption:agent_session_owner_unrecoverable'
 ])
 
 describe('agentSessionRefusalOperationState host oracle', () => {
@@ -372,6 +374,19 @@ describe('agentSessionRefusalOperationState host oracle', () => {
         })
       )
     }
+
+    const unrecoverable = await createHarness()
+    await unrecoverable.host.close(SESSION)
+    unrecoverable.host.deps.adapter.acquire = async () => {
+      throw new Error('no provider thread to resume')
+    }
+    record(
+      await assertHostAgreement(
+        unrecoverable,
+        { method: 'agentSession.send', operationId: operationId() },
+        'agent_session_owner_unrecoverable'
+      )
+    )
 
     const allPairs = METHODS.flatMap((method) =>
       AGENT_SESSION_WIRE_REFUSAL_CODES.map((code) => `${method}:${code}` as Pair)

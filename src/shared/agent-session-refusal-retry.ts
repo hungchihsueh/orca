@@ -17,6 +17,8 @@ export function agentSessionRefusalOperationState(
     return 'settled-rejected'
   }
   switch (code) {
+    // The host already tried to restart the owner for this send and could not.
+    case 'agent_session_owner_unrecoverable':
     case 'agent_session_operation_conflict':
     case 'agent_session_operation_expired':
     case 'agent_session_operation_invalid':

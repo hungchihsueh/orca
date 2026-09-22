@@ -18,7 +18,9 @@ export const AGENT_SESSION_WIRE_REFUSAL_CODES = [
   'agent_session_already_resolved',
   'agent_session_identity_required',
   'agent_session_journal_unreadable',
-  'execution_owner_reconciling'
+  'execution_owner_reconciling',
+  // Older clients hold an unknown code as a blocked send with the host's message shown.
+  'agent_session_owner_unrecoverable'
 ] as const
 export type AgentSessionWireRefusalCode = (typeof AGENT_SESSION_WIRE_REFUSAL_CODES)[number]
 

@@ -65,20 +65,26 @@ export class StructuredAgentSessionHolds {
     }
     if (!this.deps.hasProviderChild(sessionId)) {
       try {
-        await this.deps.resume(sessionId)
-        if (!this.deps.hasProviderChild(sessionId)) {
-          throw new Error('agent_session_ownership_unknown')
-        }
-        // The last surface can disconnect before acquisition makes a child available to release.
-        if (!this.disposed && !this.holders.isHeld(sessionId)) {
-          this.clock.arm(sessionId)
-        }
+        await this.resumeUnheld(sessionId)
       } catch (error) {
         if (!alreadyHeld && incarnation !== undefined) {
           this.release(sessionId, holderId, incarnation)
         }
         throw error
       }
+    }
+  }
+
+  /** Resumes a childless session for a writer; with no surface holding it, the child is released
+   *  on the same clock a departed surface would start. */
+  async resumeUnheld(sessionId: string): Promise<void> {
+    await this.deps.resume(sessionId)
+    if (!this.deps.hasProviderChild(sessionId)) {
+      throw new Error('agent_session_ownership_unknown')
+    }
+    // The last surface can disconnect before acquisition makes a child available to release.
+    if (!this.disposed && !this.holders.isHeld(sessionId)) {
+      this.clock.arm(sessionId)
     }
   }
 
