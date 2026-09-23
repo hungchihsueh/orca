@@ -9,6 +9,10 @@ export const MOBILE_WEB_BUNDLE_FETCH_REFUSALS = [
   'build-changed-mid-fetch',
   'chunk-misrouted',
   'asset-entry-changed',
+  /** A range body that would not decode: corrupt or truncated gzip, or an encoding this build lacks. */
+  'range-undecodable',
+  /** A range that decoded to a length other than the window it answered. */
+  'range-length-mismatch',
   'fetch-stopped'
 ] as const
 
