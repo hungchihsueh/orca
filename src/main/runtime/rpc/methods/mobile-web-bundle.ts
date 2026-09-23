@@ -1,6 +1,7 @@
 /**
  * Serves this install's mobile web bundle to the paired client over the already-authenticated RPC
- * connection: one call for the manifest, then one call per 48 KiB chunk of each asset.
+ * connection: one call for the manifest, then one call per 48 KiB chunk of each asset, or one per
+ * gzipped range of up to 384 KiB for a client that read `mobileWeb.bundle.range.v1`.
  *
  * No SSH or relay proxying, ever. The bundle is an artifact of the desktop the phone paired with,
  * not something a remote execution host owns, so a runtime answers only out of its own install and
@@ -18,6 +19,11 @@ import {
   type MobileWebBundleErrorCode,
   type MobileWebBundleManifestResult
 } from '../../../../shared/mobile-web-bundle/bundle-rpc-contract'
+import {
+  MOBILE_WEB_BUNDLE_RANGE_METHOD,
+  MobileWebBundleRangeParamsSchema,
+  type MobileWebBundleRangeResult
+} from '../../../../shared/mobile-web-bundle/bundle-range-rpc-contract'
 import type { MobileWebBundleAsset } from '../../../../shared/mobile-web-bundle/manifest-contract'
 import {
   loadBundledMobileWebBundle,
@@ -33,6 +39,7 @@ import {
   acquireMobileWebBundleReadSlot,
   mobileWebBundleReadBucket
 } from './mobile-web-bundle-read-admission'
+import { encodeMobileWebBundleRange } from './mobile-web-bundle-range-encoding'
 
 /** The code IS the message: `InvalidArgumentError` carries no data field, so the message is the only
  *  place a stable code can travel, and a client must be able to branch without matching prose. */
@@ -75,15 +82,58 @@ function findAsset(bundle: BundledMobileWebBundle, path: string): MobileWebBundl
   return asset
 }
 
-/** Alignment is against the size the manifest reply advertised, which the contract deliberately
- *  leaves off `offset` so the host can shrink the chunk without a client release. Offset 0 is always
- *  in range, so a zero-byte asset is still fetchable and still reports eof. */
-function assertOffsetAddressesAChunk(offset: number, asset: MobileWebBundleAsset): void {
-  if (offset % MOBILE_WEB_BUNDLE_CHUNK_BYTES !== 0) {
+/** Alignment is against the window being read: the chunk size the manifest reply advertised, which
+ *  the contract deliberately leaves off `offset` so the host can shrink it without a client release,
+ *  or a range's own requested length. Offset 0 is always in range, so a zero-byte asset is still
+ *  fetchable and still reports eof. */
+function assertOffsetAddressesAWindow(
+  offset: number,
+  windowBytes: number,
+  asset: MobileWebBundleAsset
+): void {
+  if (offset % windowBytes !== 0) {
     throw bundleError('mobile_web_bundle_offset_invalid')
   }
   if (offset > 0 && offset >= asset.byteLength) {
     throw bundleError('mobile_web_bundle_offset_invalid')
+  }
+}
+
+type VerifiedWindow = { buildId: string; asset: MobileWebBundleAsset; data: Buffer }
+
+/** The checks and the read both methods share, in order: build, member, alignment, read slot,
+ *  whole-asset verdict, then the window. `encode` runs inside the slot so a deflate is charged too. */
+async function readVerifiedWindow<T>(
+  ctx: RpcContext,
+  params: { buildId: string; path: string; offset: number },
+  windowBytes: number,
+  encode: (window: VerifiedWindow) => Promise<T>
+): Promise<T> {
+  const bundle = requireBundle()
+  // Checked before the asset lookup: a desktop that auto-updated mid-download must tell the
+  // client to restart from the manifest, not that its path went missing.
+  if (params.buildId !== bundle.manifest.buildId) {
+    throw bundleError('mobile_web_bundle_build_changed')
+  }
+  const asset = findAsset(bundle, params.path)
+  assertOffsetAddressesAWindow(params.offset, windowBytes, asset)
+
+  const release = acquireMobileWebBundleReadSlot(mobileWebBundleReadBucket(ctx))
+  if (!release) {
+    throw bundleError('mobile_web_bundle_read_limited')
+  }
+  try {
+    abortIfDisconnected(ctx)
+    if (!(await verifyMobileWebBundleAsset(bundle.root, bundle.manifest.buildId, asset))) {
+      throw bundleError('mobile_web_bundle_asset_changed')
+    }
+    abortIfDisconnected(ctx)
+    const data = await readMobileWebBundleAssetChunk(bundle.root, asset, params.offset, windowBytes)
+    return await encode({ buildId: bundle.manifest.buildId, asset, data })
+  } catch (error) {
+    throw asContractError(error, asset.path)
+  } finally {
+    release()
   }
 }
 
@@ -99,47 +149,34 @@ export const MOBILE_WEB_BUNDLE_METHODS = [
   defineMethod({
     name: MOBILE_WEB_BUNDLE_CHUNK_METHOD,
     params: MobileWebBundleChunkParamsSchema,
-    handler: async (params, ctx): Promise<MobileWebBundleChunkResult> => {
-      const bundle = requireBundle()
-      // Checked before the asset lookup: a desktop that auto-updated mid-download must tell the
-      // client to restart from the manifest, not that its path went missing.
-      if (params.buildId !== bundle.manifest.buildId) {
-        throw bundleError('mobile_web_bundle_build_changed')
-      }
-      const asset = findAsset(bundle, params.path)
-      assertOffsetAddressesAChunk(params.offset, asset)
-
-      const release = acquireMobileWebBundleReadSlot(mobileWebBundleReadBucket(ctx))
-      if (!release) {
-        throw bundleError('mobile_web_bundle_read_limited')
-      }
-      try {
-        abortIfDisconnected(ctx)
-        if (!(await verifyMobileWebBundleAsset(bundle.root, bundle.manifest.buildId, asset))) {
-          throw bundleError('mobile_web_bundle_asset_changed')
-        }
-        abortIfDisconnected(ctx)
-        const data = await readMobileWebBundleAssetChunk(
-          bundle.root,
-          asset,
-          params.offset,
-          MOBILE_WEB_BUNDLE_CHUNK_BYTES
-        )
+    handler: (params, ctx): Promise<MobileWebBundleChunkResult> =>
+      readVerifiedWindow(ctx, params, MOBILE_WEB_BUNDLE_CHUNK_BYTES, async (read) => ({
+        buildId: read.buildId,
+        path: read.asset.path,
+        offset: params.offset,
+        // The whole asset's length and hash, so one chunk describes the asset it belongs to.
+        assetByteLength: read.asset.byteLength,
+        sha256: read.asset.sha256,
+        dataBase64: read.data.toString('base64'),
+        eof: params.offset + read.data.byteLength >= read.asset.byteLength
+      }))
+  }),
+  defineMethod({
+    name: MOBILE_WEB_BUNDLE_RANGE_METHOD,
+    params: MobileWebBundleRangeParamsSchema,
+    handler: (params, ctx): Promise<MobileWebBundleRangeResult> =>
+      readVerifiedWindow(ctx, params, params.length, async (read) => {
+        const encoded = await encodeMobileWebBundleRange(read.data)
         return {
-          buildId: bundle.manifest.buildId,
-          path: asset.path,
+          buildId: read.buildId,
+          path: read.asset.path,
           offset: params.offset,
-          // The whole asset's length and hash, so one chunk describes the asset it belongs to.
-          assetByteLength: asset.byteLength,
-          sha256: asset.sha256,
-          dataBase64: data.toString('base64'),
-          eof: params.offset + data.byteLength >= asset.byteLength
+          assetByteLength: read.asset.byteLength,
+          sha256: read.asset.sha256,
+          encoding: encoded.encoding,
+          dataBase64: encoded.bytes.toString('base64'),
+          eof: params.offset + read.data.byteLength >= read.asset.byteLength
         }
-      } catch (error) {
-        throw asContractError(error, asset.path)
-      } finally {
-        release()
-      }
-    }
+      })
   })
 ]
