@@ -109,6 +109,42 @@ describe('the release clock', () => {
     expect(evict).not.toHaveBeenCalled()
   })
 
+  it('keeps an idle unheld child for thirty minutes, and activity starts the window over', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const evict = vi.fn(async () => {})
+      const idle = new StructuredAgentSessionReleaseClock({
+        isTurnActive: () => false,
+        isHeld: () => false,
+        evict
+      })
+      clocks.push(idle)
+      const minutes = (count: number) => vi.advanceTimersByTimeAsync(count * 60_000)
+
+      idle.arm('session-1')
+      await minutes(20)
+      idle.renew('session-1')
+      await minutes(29)
+      expect(evict).not.toHaveBeenCalled()
+
+      await minutes(1)
+      expect(evict).toHaveBeenCalledWith('session-1')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not start a window for a session nothing released', async () => {
+    const evict = vi.fn(async () => {})
+    const releasing = clock({ evict })
+
+    releasing.renew('session-1')
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    expect(releasing.isArmed('session-1')).toBe(false)
+    expect(evict).not.toHaveBeenCalled()
+  })
+
   it('reports a failed eviction rather than swallowing it', async () => {
     const onError = vi.fn()
     const releasing = clock({

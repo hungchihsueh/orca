@@ -6,7 +6,7 @@
 //
 // A surface takes a hold when it binds and drops it when it goes away. The first hold on a session
 // with no child resumes it — that, and not the shape of a lease on disk, is what makes a provider
-// process exist. The last hold leaving starts the release clock. Transport close is the BACKSTOP,
+// process exist. The last hold leaving starts the idle release clock. Transport close is the BACKSTOP,
 // not the mechanism: a client that vanishes mid-flight never sends its release, so the caller
 // registers one against the connection and the holder set absorbs the duplicate.
 
@@ -86,6 +86,11 @@ export class StructuredAgentSessionHolds {
     if (!this.disposed && !this.holders.isHeld(sessionId)) {
       this.clock.arm(sessionId)
     }
+  }
+
+  /** Journal activity; only an unheld session's pending release notices. */
+  renew(sessionId: string): void {
+    this.clock.renew(sessionId)
   }
 
   release(sessionId: string, holderId: string, expectedIncarnation?: symbol): void {

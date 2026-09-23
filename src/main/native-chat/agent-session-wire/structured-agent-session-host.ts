@@ -66,7 +66,8 @@ export class StructuredAgentSessionHost {
   private readonly clientDelivery = new StructuredAgentSessionClientDelivery(
     this.sessions,
     () => this.now(),
-    () => this.deps
+    () => this.deps,
+    (sessionId) => this.holds.renew(sessionId)
   )
   private readonly subscribers = this.clientDelivery.subscribers
   private readonly tasks = new StructuredAgentSessionTaskQueue()
@@ -170,7 +171,7 @@ export class StructuredAgentSessionHost {
     options?: StructuredAgentSessionHoldOptions
   ): Promise<void> => this.holds.hold(sessionId, holderId, options)
 
-  /** That surface is gone. The child outlives it by the release grace, and by any running turn. */
+  /** That surface is gone. The child outlives it by the idle window, and by any running turn. */
   release = (sessionId: string, holderId: string): void => this.holds.release(sessionId, holderId)
 
   handleAdapterEvent = (event: Parameters<StructuredAgentSessionEventRecovery['handle']>[0]) =>

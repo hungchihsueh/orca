@@ -10,6 +10,7 @@ import type { AgentSessionMutationEnvelope } from '../../../shared/agent-session
 import { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
+import { StructuredAgentSessionSendRecovery } from './structured-agent-session-send-recovery'
 import {
   HOST_TEST_NOW as NOW,
   HOST_TEST_SESSION as SESSION,
@@ -120,6 +121,65 @@ describe('a send with no live owner', () => {
     expect(acquire).toHaveBeenCalledOnce()
     expect(dispatch).toHaveBeenCalledOnce()
     expect(store.getRecord(SESSION)?.lease.claimStatus).toBe('live')
+  })
+
+  it('restarts the owner before the send is admitted, so the send runs once', async () => {
+    await loseOwner()
+    const order: string[] = []
+    const recovery = new StructuredAgentSessionSendRecovery({
+      getRecord: (sessionId) => store.getRecord(sessionId),
+      resume: async () => {
+        order.push('resume')
+      }
+    })
+
+    await recovery.send(sendParams('ensure first'), async () => {
+      order.push('run')
+      return { ok: false, refusal: { code: 'agent_session_operation_invalid', message: 'stub' } }
+    })
+
+    expect(order).toEqual(['resume', 'run'])
+  })
+
+  it('leaves a live owner alone', async () => {
+    acquire.mockClear()
+
+    await expect(host.send(CALLER, sendParams('owner is live'))).resolves.toMatchObject({
+      ok: true
+    })
+
+    expect(acquire).not.toHaveBeenCalled()
+  })
+
+  it('does not restart an owner for a send the session refuses anyway', async () => {
+    await loseOwner()
+    await store.transitionHandoff(SESSION, (current) => ({
+      ...current,
+      conversationCommand: {
+        command: 'clear',
+        state: 'completed',
+        replacementSessionId: 'session-after-clear',
+        operationId: hostTestOperationId(),
+        callerKey: CALLER.callerKey,
+        phase: 'committed'
+      }
+    }))
+
+    await host.send(CALLER, sendParams('into a cleared chat'))
+
+    expect(acquire).not.toHaveBeenCalled()
+  })
+
+  it('renews the idle window on journal activity in an unheld session', async () => {
+    await loseOwner()
+    await expect(host.send(CALLER, sendParams('restart'))).resolves.toMatchObject({ ok: true })
+    const arm = vi.spyOn(host['holds']['clock'], 'arm')
+
+    await expect(host.send(CALLER, sendParams('more activity'))).resolves.toMatchObject({
+      ok: true
+    })
+
+    expect(arm).toHaveBeenCalledWith(SESSION)
   })
 
   it('releases the restarted child on the usual clock only when no surface holds it', async () => {

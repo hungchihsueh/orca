@@ -1,10 +1,11 @@
-// A send that finds no live owner restarts it once, then runs against the new one.
+// A send checks for a live owner before it is admitted, and restarts one if the old one is gone.
 //
 // A provider child that exits or fails to start hands its lease back. Before this, a send to that
 // session was refused `agent_session_ownership_unknown` — which a client reads as "not admitted
 // yet" and resends forever — and only a surface hold could ever make a new child. Now the send
-// itself decides: route to a live owner; otherwise restart one from the persisted resume state
-// where resume is allowed; otherwise refuse with a code the client stops on.
+// itself ensures its owner: a released lease where resume is allowed gets a child first; anything
+// else runs as it is and meets the lease check in admission. A restart that fails for good refuses
+// with a code the client stops on.
 
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type {
@@ -14,7 +15,10 @@ import type {
 } from '../../../shared/agent-session-wire'
 import { refuseAgentSessionMutation } from './structured-agent-session-mutation-admission'
 import { isResumableStructuredAgentSessionRecord } from './structured-agent-session-resume-eligibility'
-import type { sendStructuredAgentSessionTurn } from './structured-agent-session-host-mutations'
+import {
+  structuredAgentSessionSendBlock,
+  type sendStructuredAgentSessionTurn
+} from './structured-agent-session-host-mutations'
 
 export const AGENT_SESSION_OWNER_UNRECOVERABLE: AgentSessionWireRefusal = {
   code: 'agent_session_owner_unrecoverable',
@@ -47,18 +51,17 @@ export class StructuredAgentSessionSendRecovery {
   ) {}
 
   async send(params: SendParams, run: (params: SendParams) => Promise<SendResult>) {
-    const first = await run(params)
-    if (first.ok || first.refusal.code !== 'agent_session_ownership_unknown') {
-      return first
-    }
     const { sessionId, expectedRuntimeFence } = params.envelope
     const record = this.deps.getRecord(sessionId)
-    // Unverifiable, still reserved, or handed off: that lease is not this send's to replace.
+    // Live, unverifiable, still reserved, or handed off: that lease is not this send's to replace.
+    // A send the record refuses anyway must not leave a child behind it.
     if (
       !this.inFlight.has(sessionId) &&
-      (!record || !isResumableStructuredAgentSessionRecord(record))
+      (!record ||
+        !isResumableStructuredAgentSessionRecord(record) ||
+        structuredAgentSessionSendBlock(record))
     ) {
-      return first
+      return run(params)
     }
     const fromFence = record?.lease.runtimeFence
     const recovery = await this.recover(sessionId)

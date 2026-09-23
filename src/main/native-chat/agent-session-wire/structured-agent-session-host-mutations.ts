@@ -17,8 +17,10 @@ import type {
   AgentSessionOptionResult,
   AgentSessionOptionsResult,
   AgentSessionPromptResult,
-  AgentSessionSendResult
+  AgentSessionSendResult,
+  AgentSessionWireRefusal
 } from '../../../shared/agent-session-wire'
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { admitAndRunAgentSessionMutation } from './structured-agent-session-mutation-admission'
 import {
   cancelPlan,
@@ -82,29 +84,37 @@ export function sendStructuredAgentSessionTurn(
   return mutate(context, caller, params.envelope, {
     ...plan,
     run: (ctx) => {
-      const rewind = context.deps.store.getRecord(ctx.sessionId)?.rewind
-      if (rewind?.phase === 'prepared' || rewind?.phase === 'provider-succeeded') {
-        return Promise.resolve(rewindRefusal('outcome-unknown'))
-      }
-      const command = context.deps.store.getRecord(ctx.sessionId)?.conversationCommand
-      if (
-        command &&
-        ((command.state === 'unknown' && command.phase === 'prepared') ||
-          (command.command === 'clear' && command.replacementSessionId))
-      ) {
-        return Promise.resolve({
-          ok: false,
-          refusal: {
-            code: 'agent_session_operation_invalid',
-            message: command.replacementSessionId
-              ? 'This conversation has been cleared. Use the current conversation.'
-              : 'The conversation operation is unconfirmed.'
-          }
-        })
-      }
-      return plan.run(ctx)
+      const blocked = structuredAgentSessionSendBlock(context.deps.store.getRecord(ctx.sessionId))
+      return blocked ? Promise.resolve(blocked) : plan.run(ctx)
     }
   })
+}
+
+/** Why the record refuses any send right now, whoever owns it; null when a send may run. */
+export function structuredAgentSessionSendBlock(
+  record: AgentSessionRecord | null
+): { ok: false; refusal: AgentSessionWireRefusal } | null {
+  const rewind = record?.rewind
+  if (rewind?.phase === 'prepared' || rewind?.phase === 'provider-succeeded') {
+    return rewindRefusal('outcome-unknown')
+  }
+  const command = record?.conversationCommand
+  if (
+    command &&
+    ((command.state === 'unknown' && command.phase === 'prepared') ||
+      (command.command === 'clear' && command.replacementSessionId))
+  ) {
+    return {
+      ok: false,
+      refusal: {
+        code: 'agent_session_operation_invalid',
+        message: command.replacementSessionId
+          ? 'This conversation has been cleared. Use the current conversation.'
+          : 'The conversation operation is unconfirmed.'
+      }
+    }
+  }
+  return null
 }
 
 export function cancelStructuredAgentSessionTurn(
