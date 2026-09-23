@@ -1,6 +1,5 @@
 import { sha256 } from '@noble/hashes/sha256'
 import {
-  mobileWebBundleChunkRead,
   mobileWebBundleManifestRead,
   readMobileWebBundleErrorCode
 } from './mobile-web-bundle-operations'
@@ -12,11 +11,17 @@ import type { RpcClient } from './rpc-client'
 import { MobileWebBundleFetchError } from './mobile-web-bundle-fetch-refusal'
 import type { MobileWebBundleReadMethod } from './mobile-web-bundle-read-method'
 import { runRpcOperation } from './rpc-operation'
+import {
+  decodeMobileWebBundleWindow,
+  mobileWebBundleWindowBytes,
+  requestMobileWebBundleWindow
+} from './mobile-web-bundle-window-read'
 
 /** The host refuses the fifth concurrent read on one connection with `mobile_web_bundle_read_limited`,
- *  so the client never offers a fifth. The four are chunk reads across the whole manifest, not one
- *  asset each: paging a large asset alone would put every one of its chunks on the critical path. */
-const MAX_CONCURRENT_ASSET_READS = 4
+ *  so the client never offers a fifth. The four are chunk or range reads across the whole manifest,
+ *  not one asset each: paging a large asset alone would put every one of its reads on the critical
+ *  path. */
+const MAX_CONCURRENT_WINDOW_READS = 4
 
 export type MobileWebBundleFetchProgress = {
   readonly completedAssets: number
@@ -62,20 +67,24 @@ export async function fetchMobileWebBundle(args: {
   const manifest = opened.manifest
   const assets = new Map<string, Uint8Array>()
   let receivedBytes = 0
+  const method = args.readMethod ?? 'chunk'
+  const windowBytes = mobileWebBundleWindowBytes(method, opened.chunkBytes)
 
   const readChunk = async (read: ChunkRead): Promise<void> => {
-    const chunk = await runRpcOperation(args.client, mobileWebBundleChunkRead, {
+    const chunk = await requestMobileWebBundleWindow(args.client, method, {
       buildId: manifest.buildId,
       path: read.asset.entry.path,
-      offset: read.offset
+      offset: read.offset,
+      length: windowBytes
     })
-    // A sibling already failed the fetch; this reply is not worth checking or hashing.
+    // A sibling already failed the fetch; this reply is not worth checking, decoding or hashing.
     if (stopped.signal.aborted || read.asset.whole === null) {
       return
     }
     assertChunkDescribesAsset(chunk, read.asset.entry, manifest.buildId, read.offset)
-    const bytes = decodeBase64(chunk.dataBase64)
-    assertChunkFillsItsSlot(read, bytes.byteLength, chunk.eof, opened.chunkBytes)
+    const expected = Math.min(windowBytes, read.asset.entry.byteLength - read.offset)
+    const bytes = decodeMobileWebBundleWindow(method, chunk, expected)
+    assertChunkFillsItsSlot(read, bytes.byteLength, chunk.eof, windowBytes)
     const { whole } = read.asset
     const { offset } = read
     whole.set(bytes, offset)
@@ -95,7 +104,7 @@ export async function fetchMobileWebBundle(args: {
   }
 
   await runChunkWindow({
-    reads: planChunkReads(manifest.assets, opened.chunkBytes),
+    reads: planChunkReads(manifest.assets, windowBytes),
     readChunk,
     signal: args.signal,
     stopped
@@ -104,7 +113,7 @@ export async function fetchMobileWebBundle(args: {
 }
 
 /** Largest asset first, so the biggest script's tail is never the last read left in flight. Offsets
- *  are the host's chunk grid, so every read is known up front; `eof` still comes from the reply. */
+ *  are the chunk or range grid, so every read is known up front; `eof` still comes from the reply. */
 function planChunkReads(
   entries: readonly MobileWebBundleAssetRead[],
   chunkBytes: number
@@ -123,7 +132,7 @@ function planChunkReads(
 }
 
 /**
- * Keeps up to four chunk reads in flight over one queue. A `read_limited` refusal means something
+ * Keeps up to four chunk or range reads in flight over one queue. A `read_limited` refusal means something
  * else holds one of the host's slots: the window narrows once per refusal at the current width and
  * the read is retried; a refusal of a read sent alone is the host's verdict and fails the fetch.
  */
@@ -134,7 +143,7 @@ function runChunkWindow(args: {
   stopped: AbortController
 }): Promise<void> {
   const queue = args.reads
-  let width = MAX_CONCURRENT_ASSET_READS
+  let width = MAX_CONCURRENT_WINDOW_READS
   let inFlight = 0
   return new Promise((resolve, reject) => {
     // One failed chunk stops every other read, not just the next: each read it would still send
@@ -298,16 +307,6 @@ function throwIfStopped(caller: AbortSignal | undefined, stopped: AbortSignal): 
       'mobile web bundle fetch stopped after an earlier chunk failed'
     )
   }
-}
-
-/** Metro ships no Buffer; `atob` is the decoder the pairing and E2EE paths already run on Hermes. */
-function decodeBase64(value: string): Uint8Array {
-  const binary = atob(value)
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index)
-  }
-  return bytes
 }
 
 function toHex(bytes: Uint8Array): string {
