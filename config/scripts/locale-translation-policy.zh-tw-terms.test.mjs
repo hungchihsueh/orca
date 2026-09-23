@@ -36,4 +36,15 @@ describe('locale-translation-policy zh-TW terminology', () => {
     expect(repairZhTw('Report status', '倉庫狀態')).toBe('倉庫狀態')
     expect(repairZhTw('Reposition panel', '儲存庫面板')).toBe('儲存庫面板')
   })
+
+  it('keeps artifacts, child agents, and workers in their UI context', () => {
+    expect(repairZhTw('Open Artifacts', '打開文物')).toBe('打開成品')
+    expect(repairZhTw('Artifact sharing', '神器分享')).toBe('成品分享')
+    expect(repairZhTw('Delete artifact?', '刪除工件？')).toBe('刪除成品？')
+    expect(repairZhTw('Show Artifacts', '顯示 Artifacts')).toBe('顯示成品')
+    expect(repairZhTw('Show child agents', '顯示兒童 Agent')).toBe('顯示子 Agent')
+    expect(repairZhTw('Nested worker depth', '嵌套工人深度')).toBe('嵌套工作者深度')
+    expect(repairZhTw('Unrelated English', '文物')).toBe('文物')
+    expect(repairZhTw('Unrelated English', '兒童')).toBe('兒童')
+  })
 })

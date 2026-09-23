@@ -391,6 +391,13 @@ export const LOCALE_PHRASE_FIXES = {
     { pattern: /存儲庫/g, replacement: '存放庫' },
     { pattern: /隊列/g, replacement: '佇列' },
     {
+      pattern: /文物|神器|工件| ?Artifacts/g,
+      replacement: '成品',
+      whenEnMatches: /\bartifacts?\b/i
+    },
+    { pattern: /兒童/g, replacement: '子', whenEnMatches: /\bchild\b/i },
+    { pattern: /派遣工|工人/g, replacement: '工作者', whenEnMatches: /\bworkers?\b/i },
+    {
       pattern: /倉庫/g,
       replacement: '存放庫',
       whenEnMatches: /\b(?:repo|repos|repository|repositories)\b/i

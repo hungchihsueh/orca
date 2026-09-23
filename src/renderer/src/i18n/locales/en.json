@@ -18133,6 +18133,12 @@
     }
   },
   "common": {
-    "retry": "Retry"
+    "retry": "Retry",
+    "childAgentDisclosure": {
+      "hide": "Hide",
+      "show": "Show",
+      "agent": "agent",
+      "agents": "agents"
+    }
   }
 }
