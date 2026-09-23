@@ -368,6 +368,9 @@ function phraseFixMatchesEnglish(enValue, fix) {
   if (fix.whenEnMatches) {
     return fix.whenEnMatches.test(enValue)
   }
+  if (!fix.whenEnIncludes) {
+    return true
+  }
   return enValue.toLowerCase().includes(fix.whenEnIncludes.toLowerCase())
 }
 

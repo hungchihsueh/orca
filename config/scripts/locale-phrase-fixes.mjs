@@ -379,11 +379,17 @@ export const LOCALE_PHRASE_FIXES = {
     { pattern: /注解/g, replacement: '批注', whenEnIncludes: 'Annotation' },
     ...ZH_PHRASE_FIXES_ROUND5
   ],
-  // Why: 倉庫/儲存庫 stay in the Repo generic renderings so the brand revert leaves them
-  // translated rather than rewriting them to Latin, and these fixes then normalize them to
-  // the 存放庫 the zh-TW catalog uses. Without them a repair run would preserve the
-  // Mainland wording that zh-tw-traditional-usage.test.ts rejects.
+  // Why: repair imported zh-TW strings to Taiwan UI wording on future catalog updates.
+  // 倉庫/儲存庫 need an English repo token so unrelated text is left alone.
   'zh-TW': [
+    { pattern: /反饋/g, replacement: '回饋' },
+    { pattern: /鏈接/g, replacement: '連結' },
+    { pattern: /信息/g, replacement: '資訊' },
+    { pattern: /內存/g, replacement: '記憶體' },
+    { pattern: /主頁/g, replacement: '首頁' },
+    { pattern: /特工/g, replacement: 'Agent' },
+    { pattern: /存儲庫/g, replacement: '存放庫' },
+    { pattern: /隊列/g, replacement: '佇列' },
     {
       pattern: /倉庫/g,
       replacement: '存放庫',

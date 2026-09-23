@@ -75,7 +75,15 @@ const FORBIDDEN_TERMS: Record<string, string> = {
   訪問: '存取',
   文檔: '文件',
   本國的: '原生',
-  無論如何: '仍要'
+  無論如何: '仍要',
+  反饋: '回饋',
+  鏈接: '連結',
+  信息: '資訊',
+  內存: '記憶體',
+  主頁: '首頁',
+  存儲庫: '存放庫',
+  特工: 'Agent',
+  隊列: '佇列'
 }
 
 function flatten(node: unknown, prefix = '', out: Record<string, string> = {}) {
