@@ -1,3 +1,4 @@
+import './mock-descendant-sweep'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { spawn } from 'node:child_process'
@@ -11,17 +12,19 @@ import type { SocketProbeOutcome } from './daemon-endpoint-probe'
 import {
   checkDaemonHealth,
   E2E_FORCE_DAEMON_HEALTH_UNREACHABLE_ENV,
+  healthCheckDaemon
+} from './daemon-health'
+import { killStaleDaemon } from './daemon-stale-kill'
+import {
   getProcessStartedAtMs,
-  healthCheckDaemon,
-  killStaleDaemon,
   parseLinuxBootTimeSeconds,
   parseLinuxProcStartTicks,
-  parseDaemonPidFile,
-  parseWindowsProcessIdentityJson,
   startTimeMatches,
   startTimesWithinTolerance
-} from './daemon-health'
-import type { SubprocessHandle } from './session'
+} from './daemon-process-start-time'
+import { parseDaemonPidFile } from './daemon-pid-file-parse'
+import { parseWindowsProcessIdentityJson } from './daemon-process-identity-query'
+import type { SubprocessHandle } from './session-subprocess-handle'
 
 function createMockSubprocess(): SubprocessHandle {
   return {
@@ -30,6 +33,7 @@ function createMockSubprocess(): SubprocessHandle {
     write() {},
     resize() {},
     kill() {},
+    terminateOwnedTree: () => 'unavailable' as const,
     forceKill() {},
     signal() {},
     onData() {},
@@ -203,7 +207,8 @@ describe('parseDaemonPidFile', () => {
       launchNonce: null,
       linuxStartTicks: null,
       bootId: null,
-      spawnerExecPath: null
+      spawnerExecPath: null,
+      cgroupUnit: null
     })
   })
 
@@ -222,7 +227,8 @@ describe('parseDaemonPidFile', () => {
       launchNonce: null,
       linuxStartTicks: null,
       bootId: null,
-      spawnerExecPath: null
+      spawnerExecPath: null,
+      cgroupUnit: null
     })
   })
 
@@ -252,7 +258,8 @@ describe('parseDaemonPidFile', () => {
       launchNonce: null,
       linuxStartTicks: null,
       bootId: null,
-      spawnerExecPath: null
+      spawnerExecPath: null,
+      cgroupUnit: null
     })
   })
 
@@ -268,7 +275,8 @@ describe('parseDaemonPidFile', () => {
       launchNonce: null,
       linuxStartTicks: null,
       bootId: null,
-      spawnerExecPath: null
+      spawnerExecPath: null,
+      cgroupUnit: null
     })
     expect(parseDaemonPidFile('  12345\n')).toEqual({
       pid: 12345,
@@ -278,7 +286,8 @@ describe('parseDaemonPidFile', () => {
       launchNonce: null,
       linuxStartTicks: null,
       bootId: null,
-      spawnerExecPath: null
+      spawnerExecPath: null,
+      cgroupUnit: null
     })
   })
 

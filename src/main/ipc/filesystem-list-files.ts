@@ -14,22 +14,28 @@ import {
   shouldExcludeQuickOpenRelPath,
   shouldIncludeQuickOpenPath
 } from '../../shared/quick-open-filter'
-import { isQuickOpenReaddirBudgetError } from '../../shared/quick-open-readdir-walk'
-import { buildInstallRgMessage } from '../../shared/quick-open-install-rg'
-import { listFilesWithGit } from './filesystem-list-files-git-fallback'
+import {
+  limitQuickOpenFilesBySerializedBytes,
+  serializedQuickOpenPathBytes
+} from '../../shared/quick-open-transport-budget'
+import { listFilesWithoutRipgrep } from './filesystem-list-files-without-ripgrep'
 import {
   absorbPendingRipgrepSpawnError,
   isRipgrepUnavailableExit,
   killSpawnedRipgrepProcess,
   RipgrepUnavailableError
 } from '../../shared/ripgrep-process-availability'
+import { fileListingCancellationError } from '../../shared/file-listing-cancellation'
 
 export async function listQuickOpenFiles(
   rootPath: string,
   store: Store,
   excludePaths?: string[],
   signal?: AbortSignal,
-  maxResults?: number
+  maxResults?: number,
+  maxSerializedBytes?: number,
+  /** Applied before `maxResults`, so the cap counts matches rather than scanned files. */
+  pathFilter?: (relativePath: string) => boolean
 ): Promise<string[]> {
   const authorizedRootPath = await resolveAuthorizedPath(rootPath, store)
   const localGitOptions = getLocalGitOptionsForRegisteredWorktree(
@@ -45,22 +51,16 @@ export async function listQuickOpenFiles(
   const excludePathPrefixes = buildExcludePathPrefixes(authorizedRootPath, excludePaths)
   const wslDistroForOutput = parseWslPath(authorizedRootPath)?.distro ?? localGitOptions.wslDistro
 
-  const listWithoutRipgrep = async (): Promise<string[]> => {
-    try {
-      return await listFilesWithGit(
-        authorizedRootPath,
-        excludePathPrefixes,
-        localGitOptions,
-        signal,
-        maxResults
-      )
-    } catch (err) {
-      if (!isQuickOpenReaddirBudgetError(err)) {
-        throw err
-      }
-      throw new Error(await buildInstallRgMessage(err))
-    }
-  }
+  const listWithoutRipgrep = (): Promise<string[]> =>
+    listFilesWithoutRipgrep({
+      rootPath: authorizedRootPath,
+      excludePathPrefixes,
+      localGitOptions,
+      signal,
+      maxResults,
+      maxSerializedBytes,
+      pathFilter
+    })
   if (
     wslDistroForOutput &&
     !(await checkRgAvailable(authorizedRootPath, localGitOptions.wslDistro))
@@ -69,6 +69,7 @@ export async function listQuickOpenFiles(
   }
 
   const files = new Set<string>()
+  let serializedBytes = 2 // []
   const children: {
     child: ChildProcess
     isDone: () => boolean
@@ -76,7 +77,7 @@ export async function listQuickOpenFiles(
   }[] = []
   // Why: WSL-routed rg can emit Linux-native absolute paths. UNC repos carry
   // their distro in the path; Windows-path repos carry it in project runtime.
-  const { primary, ignoredPass } = buildRgArgsForQuickOpen({
+  const rgArgs = buildRgArgsForQuickOpen({
     // Why: rg evaluates root-relative exclude globs against cwd only when the
     // search target is cwd-relative. With an absolute target, `!packages/app`
     // filters output after traversal but does not prune the nested worktree.
@@ -86,6 +87,8 @@ export async function listQuickOpenFiles(
     // macOS/Linux for idempotence — it's a no-op there.
     forceSlashSeparator: sep === '\\'
   })
+  const primary = rgArgs.primary
+  const ignoredPass = rgArgs.ignoredPass
 
   const runRg = (args: string[]): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -114,8 +117,21 @@ export async function listQuickOpenFiles(
         if (shouldExcludeQuickOpenRelPath(relPath, excludePathPrefixes)) {
           return false
         }
+        if (pathFilter && !pathFilter(relPath)) {
+          return false
+        }
+        if (files.has(relPath)) {
+          return false
+        }
         if (maxResults !== undefined && files.size >= maxResults) {
           return true
+        }
+        if (maxSerializedBytes !== undefined) {
+          const nextBytes = serializedQuickOpenPathBytes(relPath) + (files.size === 0 ? 0 : 1)
+          if (serializedBytes + nextBytes > maxSerializedBytes) {
+            return true
+          }
+          serializedBytes += nextBytes
         }
         files.add(relPath)
         return maxResults !== undefined && files.size >= maxResults
@@ -202,6 +218,7 @@ export async function listQuickOpenFiles(
         child.stderr!.off('data', handleStderrData)
         child.off('error', handleError)
         child.off('close', handleClose)
+        signal?.removeEventListener('abort', handleAbort)
         absorbPendingRipgrepSpawnError(child, {
           errorObserved: processErrorObserved,
           unavailableExitObserved
@@ -211,6 +228,11 @@ export async function listQuickOpenFiles(
         } else {
           resolve()
         }
+      }
+      const handleAbort = (): void => {
+        buf = ''
+        killSpawnedRipgrepProcess(child)
+        finish(fileListingCancellationError(signal))
       }
 
       children.push({ child, isDone: () => done, finish })
@@ -227,6 +249,10 @@ export async function listQuickOpenFiles(
         killSpawnedRipgrepProcess(child)
         finish(new Error('rg list timed out'))
       }, 10000)
+      signal?.addEventListener('abort', handleAbort, { once: true })
+      if (signal?.aborted) {
+        handleAbort()
+      }
     })
   }
 
@@ -258,17 +284,25 @@ export async function listQuickOpenFiles(
   }
   try {
     const primaryRun = runRg(primary)
-    if (maxResults === undefined) {
+    if (maxResults === undefined && maxSerializedBytes === undefined) {
       // Why: a pid-less primary proves launch failure; avoid doubling the failed spawn.
       await (children[0]?.child.pid === undefined
         ? primaryRun
         : Promise.all([primaryRun, runRg(ignoredPass)]))
     } else {
-      // Why: ignored-file output can be much larger and faster than the primary
-      // pass; let source files claim the bounded autocomplete budget first.
+      // Why: ignored-file output can be much larger and faster than the primary pass; let source
+      // files claim every bounded autocomplete budget first, including the transport byte cap.
       await primaryRun
-      if (files.size < maxResults) {
-        await runRg(ignoredPass)
+      if (
+        (maxResults === undefined || files.size < maxResults) &&
+        (maxSerializedBytes === undefined || serializedBytes < maxSerializedBytes)
+      ) {
+        // Why: a filtered scan walks the whole tree; an ignored-pass timeout keeps primary matches.
+        await runRg(ignoredPass).catch((err: unknown) => {
+          if (!pathFilter || signal?.aborted || err instanceof RipgrepUnavailableError) {
+            throw err
+          }
+        })
       }
     }
   } catch (err) {
@@ -278,7 +312,10 @@ export async function listQuickOpenFiles(
     }
     throw err
   }
-  return Array.from(files).slice(0, maxResults)
+  const result = Array.from(files).slice(0, maxResults)
+  return maxSerializedBytes === undefined
+    ? result
+    : limitQuickOpenFilesBySerializedBytes(result, maxSerializedBytes)
 }
 
 function getQuickOpenRgOutputMode(
