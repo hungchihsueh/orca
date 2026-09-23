@@ -4,20 +4,22 @@ import {
   MOBILE_WEB_BUNDLE_MANIFEST_METHOD,
   type MobileWebBundleErrorCode
 } from '../../../src/shared/mobile-web-bundle/bundle-rpc-contract'
+import { MOBILE_WEB_BUNDLE_RANGE_METHOD } from '../../../src/shared/mobile-web-bundle/bundle-range-rpc-contract'
 import {
   MobileWebBundleChunkReplySchema,
-  MobileWebBundleManifestReplySchema
+  MobileWebBundleManifestReplySchema,
+  MobileWebBundleRangeReplySchema
 } from './mobile-web-bundle-reply-schemas'
 import { isRpcDeliveryUnknown } from './rpc-delivery-ambiguity'
 import { defineRpcOperation } from './rpc-operation'
 import { isLogicalClientCutoverError } from './stable-logical-rpc-client'
 import { rpcResultVariant } from './rpc-operation-result-reader'
 
-// The two reads that hand a paired phone the desktop's mobile web bundle. Both are
+// The reads that hand a paired phone the desktop's mobile web bundle. All are
 // `require-result-or-throw`: there is no partial success here, and a salvage policy would produce a
-// half-bundle that fails a hash check much later, far from the cause. Both settle at `on-settle`,
+// half-bundle that fails a hash check much later, far from the cause. All settle at `on-settle`,
 // because each reply is acted on before the next request is built — the manifest decides which
-// assets to page, and a chunk decides the next offset.
+// assets to page, and a chunk or range decides the next offset.
 
 /** The whole manifest plus the chunk size the host will serve it at. */
 export const mobileWebBundleManifestRead = defineRpcOperation({
@@ -35,6 +37,16 @@ export const mobileWebBundleChunkRead = defineRpcOperation({
   acceptance: 'require-result-or-throw',
   barrier: 'on-settle',
   read: rpcResultVariant('mobile-web-bundle-chunk', MobileWebBundleChunkReplySchema)
+})
+
+/** Up to 384 KiB of one asset, gzipped when that shrinks it. Only sent to a host that advertised
+ *  `mobileWeb.bundle.range.v1`; see `mobile-web-bundle-read-method.ts`. */
+export const mobileWebBundleRangeRead = defineRpcOperation({
+  name: 'mobileWeb.bundle-range',
+  method: MOBILE_WEB_BUNDLE_RANGE_METHOD,
+  acceptance: 'require-result-or-throw',
+  barrier: 'on-settle',
+  read: rpcResultVariant('mobile-web-bundle-range', MobileWebBundleRangeReplySchema)
 })
 
 /** A code is a bare snake_case token, so only the two positions one can occupy are read. */

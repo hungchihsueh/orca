@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { MOBILE_WEB_BUNDLE_CHUNK_BYTES } from '../../../src/shared/mobile-web-bundle/bundle-rpc-contract'
+import { MOBILE_WEB_BUNDLE_RANGE_MAX_DATA_BASE64_LENGTH } from '../../../src/shared/mobile-web-bundle/bundle-range-rpc-contract'
 import {
   computeMobileWebBundleId,
   MobileWebBundleAssetPathSchema,
@@ -126,6 +127,20 @@ export const MobileWebBundleChunkReplySchema = z.looseObject({
   assetByteLength: z.number().int().nonnegative().max(MOBILE_WEB_BUNDLE_MAX_ASSET_BYTES),
   sha256: z.string().regex(SHA256_PATTERN),
   dataBase64: z.string().max(MAX_DATA_BASE64_LENGTH),
+  eof: z.boolean()
+})
+
+/** A chunk's self-description plus the encoding of `dataBase64`. `encoding` is read as a string, not
+ *  a closed enum: an encoding this build cannot decode is a typed refusal at the decoder, which
+ *  names it, rather than a reply-shape failure that names nothing. */
+export const MobileWebBundleRangeReplySchema = z.looseObject({
+  buildId: z.string().regex(SHA256_PATTERN),
+  path: MobileWebBundleAssetPathSchema,
+  offset: z.number().int().nonnegative().max(MOBILE_WEB_BUNDLE_MAX_ASSET_BYTES),
+  assetByteLength: z.number().int().nonnegative().max(MOBILE_WEB_BUNDLE_MAX_ASSET_BYTES),
+  sha256: z.string().regex(SHA256_PATTERN),
+  encoding: z.string().min(1).max(32),
+  dataBase64: z.string().max(MOBILE_WEB_BUNDLE_RANGE_MAX_DATA_BASE64_LENGTH),
   eof: z.boolean()
 })
 
