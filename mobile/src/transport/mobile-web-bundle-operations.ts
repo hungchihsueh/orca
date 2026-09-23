@@ -17,7 +17,7 @@ import { rpcResultVariant } from './rpc-operation-result-reader'
 // `require-result-or-throw`: there is no partial success here, and a salvage policy would produce a
 // half-bundle that fails a hash check much later, far from the cause. Both settle at `on-settle`,
 // because each reply is acted on before the next request is built — the manifest decides which
-// assets to page, and a chunk decides the next offset.
+// chunks to read, and a chunk's reply decides whether its asset is whole.
 
 /** The whole manifest plus the chunk size the host will serve it at. */
 export const mobileWebBundleManifestRead = defineRpcOperation({
