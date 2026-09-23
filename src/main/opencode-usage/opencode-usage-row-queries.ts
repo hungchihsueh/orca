@@ -33,8 +33,8 @@ type OpenCodeSessionUsageRow = {
 // Why: OpenCode 2 copies every v1 `session` row into `session_v2` and then only
 // writes there, so a migrated opencode.db holds both tables and the same session
 // id in each. Reading `session` alone loses every OpenCode 2 session (#15841);
-// reading both unfiltered would double-count the migrated ones. Higher priority
-// first — the first table that owns an id wins.
+// reading both unfiltered would double-count the migrated ones. Newest first,
+// which only breaks ties — the fuller row wins, see `buildSessionTableSelect`.
 const SESSION_TABLES_BY_PRIORITY = ['session_v2', 'session'] as const
 
 // Columns the usage scan reads off a session row, with the SQL literal to
@@ -54,8 +54,22 @@ const SESSION_SOURCE_COLUMNS: Record<string, string> = {
   tokens_cache_write: '0'
 }
 
-const SESSION_TOKEN_TOTAL =
-  's.tokens_input + s.tokens_output + s.tokens_reasoning + s.tokens_cache_read + s.tokens_cache_write'
+const SESSION_TOKEN_COLUMNS = [
+  'tokens_input',
+  'tokens_output',
+  'tokens_reasoning',
+  'tokens_cache_read',
+  'tokens_cache_write'
+] as const
+
+const SESSION_TOKEN_TOTAL = SESSION_TOKEN_COLUMNS.map((name) => `s.${name}`).join(' + ')
+
+/** The same total against one raw session table, which may be missing columns. */
+function sessionTableTokenTotal(db: Database.Database, table: string, alias: string): string {
+  return SESSION_TOKEN_COLUMNS.map((name) =>
+    columnExists(db, table, name) ? `${alias}.${name}` : '0'
+  ).join(' + ')
+}
 
 function listSessionTables(db: Database.Database): string[] {
   return SESSION_TABLES_BY_PRIORITY.filter(
@@ -65,23 +79,36 @@ function listSessionTables(db: Database.Database): string[] {
 
 function buildSessionTableSelect(
   db: Database.Database,
-  table: string,
-  higherPriorityTables: readonly string[]
+  tables: readonly string[],
+  index: number
 ): string {
+  const table = tables[index] ?? ''
   const columns = Object.entries(SESSION_SOURCE_COLUMNS).map(
-    ([name, fallback]) => `${columnExists(db, table, name) ? name : fallback} AS ${name}`
+    ([name, fallback]) => `${columnExists(db, table, name) ? `t.${name}` : fallback} AS ${name}`
   )
-  const exclusions = higherPriorityTables
-    .map((other) => `id NOT IN (SELECT id FROM ${other})`)
+  // Why the fuller row rather than the newer one: `session_v2` is not reliably a
+  // superset. Upstream's importer recomputes v2 totals from decoded messages, so
+  // a session whose messages fail to decode lands below its frozen legacy row; a
+  // v2 table without the token columns at all scores 0 and would otherwise erase
+  // the legacy row's usage entirely. Ties go to the higher-priority table, so a
+  // faithful copy still resolves to `session_v2`.
+  const total = sessionTableTokenTotal(db, table, 't')
+  const exclusions = tables
+    .map((other, otherIndex) => {
+      if (otherIndex === index) {
+        return null
+      }
+      const beats = otherIndex < index ? '>=' : '>'
+      return `NOT EXISTS (SELECT 1 FROM ${other} o WHERE o.id = t.id AND ${sessionTableTokenTotal(db, other, 'o')} ${beats} ${total})`
+    })
+    .filter((clause) => clause !== null)
     .join(' AND ')
-  return `SELECT id, ${columns.join(', ')} FROM ${table}${exclusions ? ` WHERE ${exclusions}` : ''}`
+  return `SELECT t.id, ${columns.join(', ')} FROM ${table} t${exclusions ? ` WHERE ${exclusions}` : ''}`
 }
 
 /** A single deduplicated session relation spanning every session table generation. */
 function buildSessionSource(db: Database.Database, tables: readonly string[]): string {
-  const selects = tables.map((table, index) =>
-    buildSessionTableSelect(db, table, tables.slice(0, index))
-  )
+  const selects = tables.map((_table, index) => buildSessionTableSelect(db, tables, index))
   return `(${selects.join(' UNION ALL ')})`
 }
 
@@ -105,6 +132,8 @@ function getAssistantSessionMessageCount(db: Database.Database): number {
   return row?.count ?? 0
 }
 
+// `some`, not `every`: a table missing the token columns scores 0 in the source's
+// tie-break, so it can never outrank — or erase — a sibling that carries them.
 function hasSessionUsageColumns(db: Database.Database, tables: readonly string[]): boolean {
   return tables.some((table) =>
     ['cost', 'tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read'].every(

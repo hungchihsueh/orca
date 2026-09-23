@@ -134,6 +134,49 @@ describe('OpenCode 2 session_v2 usage', () => {
     expect(events[0]?.cachedInputTokens).toBe(60)
   })
 
+  it('keeps the legacy totals when session_v2 lacks the token columns', () => {
+    const path = createFixture({
+      generation: 'migrated',
+      v2WithoutTokenColumns: true,
+      legacySessions: [{ id: 'ses_shared', directory: WORKTREE, tokensInput: 1000, cost: 5 }],
+      v2Sessions: [{ id: 'ses_shared', directory: WORKTREE }]
+    })
+
+    const events = readEvents(path)
+    expect(events.map((event) => event.sessionId)).toEqual(['ses_shared'])
+    expect(events[0]?.inputTokens).toBe(1000)
+    expect(events[0]?.estimatedCostUsd).toBe(5)
+  })
+
+  it('keeps the legacy totals when the migration recomputed session_v2 lower', () => {
+    const path = createFixture({
+      generation: 'migrated',
+      // Upstream recomputes v2 totals from decoded messages; undecodable ones
+      // are dropped, landing the v2 row below its frozen legacy copy.
+      legacySessions: [{ id: 'ses_shared', directory: WORKTREE, tokensInput: 900 }],
+      v2Sessions: [{ id: 'ses_shared', directory: WORKTREE, tokensInput: 120 }]
+    })
+
+    const events = readEvents(path)
+    expect(events.map((event) => event.sessionId)).toEqual(['ses_shared'])
+    expect(events[0]?.inputTokens).toBe(900)
+  })
+
+  it('resolves an identical migrated copy to session_v2', () => {
+    const shared = { id: 'ses_shared', directory: WORKTREE, tokensInput: 64 }
+    const path = createFixture({
+      generation: 'migrated',
+      legacySessions: [{ ...shared, model: '{"providerID":"anthropic","modelID":"legacy"}' }],
+      v2Sessions: [{ ...shared, model: '{"providerID":"anthropic","modelID":"v2"}' }]
+    })
+
+    const events = readEvents(path)
+    expect(events.map((event) => event.sessionId)).toEqual(['ses_shared'])
+    expect(events[0]?.inputTokens).toBe(64)
+    // Equal totals: the tie goes to the newer table, so its row supplies metadata.
+    expect(events[0]?.model).toContain('v2')
+  })
+
   it('keeps legacy sessions that never migrated', () => {
     const path = createFixture({
       generation: 'migrated',
