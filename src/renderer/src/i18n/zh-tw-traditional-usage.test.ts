@@ -90,7 +90,13 @@ const FORBIDDEN_TERMS: Record<string, string> = {
   Artifacts: '成品',
   兒童: '子 Agent',
   派遣工: '工作者',
-  工人: '工作者'
+  工人: '工作者',
+  文件夾: '資料夾',
+  線程: '討論串或執行緒（視脈絡而定）',
+  緩存: '快取',
+  插件: '外掛',
+  創建: '建立',
+  嵌套: '巢狀'
 }
 
 function flatten(node: unknown, prefix = '', out: Record<string, string> = {}) {

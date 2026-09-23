@@ -390,6 +390,12 @@ export const LOCALE_PHRASE_FIXES = {
     { pattern: /特工/g, replacement: 'Agent' },
     { pattern: /存儲庫/g, replacement: '存放庫' },
     { pattern: /隊列/g, replacement: '佇列' },
+    { pattern: /文件夾/g, replacement: '資料夾' },
+    { pattern: /緩存/g, replacement: '快取' },
+    { pattern: /插件/g, replacement: '外掛' },
+    { pattern: /創建/g, replacement: '建立' },
+    { pattern: /嵌套/g, replacement: '巢狀' },
+    { pattern: /線程/g, replacement: '執行緒', whenEnMatches: /\bCPU threads?\b/i },
     {
       pattern: /文物|神器|工件| ?Artifacts/g,
       replacement: '成品',

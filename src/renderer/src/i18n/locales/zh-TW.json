@@ -499,8 +499,8 @@
               }
             }
           },
-          "createdWithoutParentNesting": "創建時未嵌套在“{{value0}}”下",
-          "createdWithoutParentNestingUnnamed": "創建時不嵌套在選定的父項下",
+          "createdWithoutParentNesting": "建立時未巢狀於「{{value0}}」之下",
+          "createdWithoutParentNestingUnnamed": "建立時未巢狀於所選的父工作區之下",
           "createdWithoutParentNestingDetail": "父工作區不再可用。您可以從工作區選單中進行設定。"
         },
         "repos": {
@@ -1689,7 +1689,7 @@
         "326a578923": "orca.yaml + 本機",
         "2132b670da": "兩者",
         "0e587e31fb": "yaml",
-        "ac3748dcda": "創建自",
+        "ac3748dcda": "建立來源",
         "f660aa1454": "連線中",
         "7711ad5122": "本機設定命令",
         "e5db1b0419": "組合設定命令",
@@ -5008,7 +5008,7 @@
         "SkillDelete": {
           "dismissResults": "關閉",
           "reasonBundled": "與 Orca 捆綁在一起 — 它將被恢復",
-          "reasonPlugin": "由插件安裝 - 刪除插件",
+          "reasonPlugin": "由外掛安裝，請移除外掛",
           "reasonUnowned": "該技能位於 Orca 的技能資料夾之外 - 將其刪除在儲存位置",
           "reasonMissing": "該技能已不在磁碟上",
           "reasonStale": "自從清單載入後，此技能發生了變化 - 重新整理並重試",
@@ -5693,7 +5693,7 @@
           "primaryDeleteDisabled": "主工作樹不能刪除。請改為移除專案。",
           "deleteWorktree": "刪除工作樹",
           "sleepWithDescendants": "與後代同眠 ({{value0}})",
-          "sleepWithDescendantsDescription": "關閉此工作區中的活動面板以及每個嵌套的後代面板以釋放記憶體和 CPU。",
+          "sleepWithDescendantsDescription": "關閉此工作區中的活動面板以及每個巢狀的後代面板以釋放記憶體和 CPU。",
           "deleteWithDescendants": "與後代一起刪除..."
         },
         "WorktreeList": {
@@ -6433,7 +6433,7 @@
           "resetStillBlocked": "重置後仍然被阻止。"
         },
         "macFolderAccessFolderName": {
-          "documents": "文件夾",
+          "documents": "文件資料夾",
           "desktop": "桌面資料夾",
           "downloads": "下載資料夾",
           "workspace": "工作區資料夾"
@@ -11793,7 +11793,7 @@
           "loadingBuilds": "正在載入建置...",
           "noBuilds": "未找到任何構建",
           "refresh": "重新整理建置列表",
-          "cacheHint": "建立清單緩存 5 分鐘。重新整理以檢查新版本。",
+          "cacheHint": "版本清單會快取 5 分鐘。重新整理以檢查新版本。",
           "switchTo": "切換到構建",
           "alreadyRunning": "這是您正在執行的建置。",
           "willSwitch": "{{value0}} → {{value1}}",
@@ -16093,8 +16093,8 @@
           "2a20596d6b": "自動化已儲存。",
           "244727e655": "自動化已更新。",
           "moved": "自動化已移至 {host}。",
-          "moveOriginalKept": "在 {host} 上創建，但原始無法刪除。在舊主機上將其刪除。",
-          "moveOriginalUnverified": "在 {host} 上創建，但無法驗證原始刪除。重試前請檢查舊主機。",
+          "moveOriginalKept": "在 {host} 上建立，但原始無法刪除。在舊主機上將其刪除。",
+          "moveOriginalUnverified": "在 {host} 上建立，但無法驗證原始刪除。重試前請檢查舊主機。",
           "77b81bc4ac": "Hermes 自動化建立。",
           "08efc3ae12": "Hermes 自動化已更新。",
           "e431bb85d4": "選擇與此 Hermes 自動化位於同一主機上的工作區。",
@@ -16479,8 +16479,8 @@
           "770d458144": "分組依據",
           "795cbf26e2": "篩選...",
           "4616ea39fd": "跳轉到工作區",
-          "markThreadRead": "將線程標記為已讀",
-          "59b131fbd9": "將話題標記為未讀",
+          "markThreadRead": "將討論串標示為已讀",
+          "59b131fbd9": "將討論串標示為未讀",
           "beb2c19173": "未讀",
           "5651b216c6": "未知專案",
           "22b22034bc": "獨立終端在活動中不可用。",
