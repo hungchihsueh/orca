@@ -161,7 +161,7 @@ describe('fetchMobileWebBundle', () => {
     expect(host.calls[0]!.params).toEqual({})
   })
 
-  it('asks for each chunk at the offset the previous reply ended on', async () => {
+  it('asks for each chunk at the next step of the advertised chunk size', async () => {
     const host = bundleHost({ 'index.html': 'abcdefghij' }, { chunkBytes: 3 })
 
     await fetchMobileWebBundle({ client: host.client })
@@ -431,7 +431,7 @@ describe('fetchMobileWebBundle', () => {
     expect(await refusalOf(failed)).toBe('asset-no-progress')
   })
 
-  it('stops the other workers mid-asset once one asset is refused', async () => {
+  it('stops the other reads mid-asset once one chunk is refused', async () => {
     const host = bundleHost(
       {
         'a.js': 'x',
@@ -442,7 +442,9 @@ describe('fetchMobileWebBundle', () => {
       {
         chunkBytes: 1,
         intercept: (call) =>
-          call.method === 'mobileWeb.bundle.chunk' && paramField(call.params, 'path') === 'a.js'
+          call.method === 'mobileWeb.bundle.chunk' &&
+          paramField(call.params, 'path') === 'b.js' &&
+          paramField(call.params, 'offset') === 1
             ? new Error('mobile_web_bundle_asset_unknown')
             : undefined
       }
@@ -456,8 +458,8 @@ describe('fetchMobileWebBundle', () => {
 
     // The refusal is what the caller sees; the internal stop never surfaces.
     expect(readMobileWebBundleErrorCode(error)).toBe('mobile_web_bundle_asset_unknown')
-    // 120 chunks would page the other three assets to the end. One more round of four is the most
-    // the abandoned workers can add, because each checks the stop before it asks for a chunk.
+    // 120 chunks would page all three large assets to the end. One more round of four is the most
+    // the window can add, because it checks the stop before it asks for a chunk.
     expect(chunkCallCount(host.calls)).toBeLessThanOrEqual(atRejection + 4)
     expect(chunkCallCount(host.calls)).toBeLessThan(10)
   })
