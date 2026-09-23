@@ -9,6 +9,7 @@ import type {
 } from './mobile-web-bundle-reply-schemas'
 import type { RpcClient } from './rpc-client'
 import { MobileWebBundleFetchError } from './mobile-web-bundle-fetch-refusal'
+import type { MobileWebBundleReadMethod } from './mobile-web-bundle-read-method'
 import { runRpcOperation } from './rpc-operation'
 
 /** The host refuses the fifth concurrent read on one connection with `mobile_web_bundle_read_limited`,
@@ -39,6 +40,8 @@ export type MobileWebBundleFetchResult = {
  */
 export async function fetchMobileWebBundle(args: {
   client: RpcClient
+  /** Absent reads as `chunk`, the method every bundle host serves. */
+  readMethod?: MobileWebBundleReadMethod
   signal?: AbortSignal
   onProgress?: (progress: MobileWebBundleFetchProgress) => void
 }): Promise<MobileWebBundleFetchResult> {

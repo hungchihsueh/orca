@@ -168,6 +168,8 @@ export function useMobileWebShellSession(args: {
         case 'download':
           await download({
             client,
+            // The gates the reducer decided to download under, not a later render's.
+            hostCapabilities: sessionRef.current.gates?.hostCapabilities ?? [],
             store,
             hostKey,
             flow,
