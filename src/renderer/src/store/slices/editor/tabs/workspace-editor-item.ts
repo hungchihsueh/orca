@@ -2,6 +2,7 @@ import type { AppState } from '../../../types'
 import type { EditorSlice } from '../types/editor-slice'
 import type { OpenFile } from '../types/open-file'
 import { resolveEditorOpenTargetGroupId } from './editor-open-target-group'
+import { areEditorPreviewTabsEnabled } from './editor-preview-tab-setting'
 import { isEditorTabContentType } from './editor-tab-content-type'
 
 export function openWorkspaceEditorItem(
@@ -36,10 +37,14 @@ export function openWorkspaceEditorItem(
   return created?.id ?? fileId
 }
 export function getReplaceablePreviewFileId(
-  state: Pick<AppState, 'openFiles' | 'unifiedTabsByWorktree'>,
+  state: Pick<AppState, 'openFiles' | 'unifiedTabsByWorktree' | 'settings'>,
   worktreeId: string,
   targetGroupId: string | undefined
 ): string | null {
+  // Why: a restored session can carry preview flags from before the setting was turned off; never evict on those.
+  if (!areEditorPreviewTabsEnabled(state)) {
+    return null
+  }
   const tabsForWorktree = state.unifiedTabsByWorktree?.[worktreeId] ?? []
   if (targetGroupId) {
     const previewTab = tabsForWorktree.find(

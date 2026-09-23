@@ -7250,6 +7250,8 @@
           "configureProxy": "Configure proxy"
         },
         "GeneralPane": {
+          "editor_preview_tabs": "Reuse a preview tab when browsing files",
+          "editor_preview_tabs_description": "Single-clicking a file in the Explorer, or following a Markdown link, reuses one italic preview tab per group instead of opening a new one. Editing, double-clicking, or pinning keeps that tab open. Turn this off to give every file its own tab.",
           "confirm_running_terminal_close": "Confirm before closing running terminals",
           "confirm_running_terminal_close_description": "Ask before stopping a running agent or command when closing a terminal.",
           "d58fccfd84": "Navigation",

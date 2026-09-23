@@ -20,6 +20,7 @@ import {
   buildEditorActiveResult,
   resolveEditorOpenTargetGroupId
 } from '../tabs/editor-open-target-group'
+import { resolveEditorPreviewIntent } from '../tabs/editor-preview-tab-setting'
 import {
   getReplaceablePreviewFileId,
   removeEditorStateForReplacedPreview
@@ -89,7 +90,7 @@ export function applyOpenFileToState(
           reusableOpenFileModes
         )
   scratch.editorItemFileId = id
-  const isPreview = options?.preview ?? false
+  const isPreview = resolveEditorPreviewIntent(s, options?.preview)
   const recordReplacedPreview = options?.recordReplacedPreview ?? false
   // Why: resolve the target group up-front so preview replacement is scoped to it (group B open must not evict group A's preview).
   const targetGroupId =

@@ -1,5 +1,6 @@
 import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
+import { resolveEditorPreviewIntent } from '../tabs/editor-preview-tab-setting'
 import { openWorkspaceEditorItem } from '../tabs/workspace-editor-item'
 import {
   EDITOR_FOCUS_REQUEST_TTL_MS,
@@ -34,7 +35,7 @@ export function createOpenFileAction(
         editorItemWorktreeId,
         editorItemLabel,
         editorItemContentType,
-        options?.preview ?? false,
+        resolveEditorPreviewIntent(get(), options?.preview),
         scratch.editorItemTargetGroupId
       )
       if (options?.focusEditor) {
