@@ -65,7 +65,17 @@ const FORBIDDEN_TERMS: Record<string, string> = {
   郵箱: '信箱',
   谷歌: 'Google',
   回車: 'Enter',
-  命令提示符: '命令提示字元'
+  命令提示符: '命令提示字元',
+  設備: '裝置',
+  濾鏡: '篩選器',
+  過濾器: '篩選器',
+  拉取請求: 'PR',
+  密鑰: '金鑰',
+  保存: '儲存',
+  訪問: '存取',
+  文檔: '文件',
+  本國的: '原生',
+  無論如何: '仍要'
 }
 
 function flatten(node: unknown, prefix = '', out: Record<string, string> = {}) {
@@ -76,7 +86,7 @@ function flatten(node: unknown, prefix = '', out: Record<string, string> = {}) {
   if (!node || typeof node !== 'object') {
     return out
   }
-  for (const [key, child] of Object.entries(node as Record<string, unknown>)) {
+  for (const [key, child] of Object.entries(node)) {
     flatten(child, prefix ? `${prefix}.${key}` : key, out)
   }
   return out

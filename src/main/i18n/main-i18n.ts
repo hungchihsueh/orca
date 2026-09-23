@@ -63,6 +63,7 @@ export async function ensureMainI18n(): Promise<I18nInstance> {
     await mainI18n.use(lazyLocaleBackend).init({
       fallbackLng: DEFAULT_UI_LOCALE,
       lng: DEFAULT_UI_LOCALE,
+      load: 'currentOnly',
       // Why: mark the default locale loaded with an empty resource bundle. Main
       // process English strings come from translateMain() fallbacks, and
       // partialBundledLanguages lets the backend supply non-English catalogs.

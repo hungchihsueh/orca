@@ -53,6 +53,7 @@ describe('ui-locale', () => {
     expect(normalizeSupportedUiLocale('zh-Hant')).toBe('zh-TW')
     expect(normalizeSupportedUiLocale('zh-Hant-TW')).toBe('zh-TW')
     expect(normalizeSupportedUiLocale('zh_TW')).toBe('zh-TW')
+    expect(normalizeSupportedUiLocale('zh-Twitch')).toBe('zh')
   })
 
   it('resolves explicit English independently of system locale', () => {

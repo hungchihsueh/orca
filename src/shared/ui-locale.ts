@@ -27,7 +27,9 @@ export function normalizeSupportedUiLocale(locale: string | undefined): Supporte
   const tag = normalizeLocaleTag(locale)
   const primary = tag.split('-')[0]
   if (primary === 'zh') {
-    return TRADITIONAL_CHINESE_TAG_PREFIXES.some((prefix) => tag.startsWith(prefix))
+    return TRADITIONAL_CHINESE_TAG_PREFIXES.some(
+      (prefix) => tag === prefix || tag.startsWith(`${prefix}-`)
+    )
       ? 'zh-TW'
       : 'zh'
   }
